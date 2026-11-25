@@ -1,0 +1,921 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GhostWatch — Zero-Credential Sprite Watchdog</title>
+<style>
+  :root {
+    --paper: #f6f5f0;
+    --surface: #ffffff;
+    --ink: #14171a;
+    --muted: #5b636e;
+    --rule: #d8d5cc;
+    --cobalt: #1d4ed8;
+    --forest: #15803d;
+    --crimson: #b91c1c;
+    --amber: #b45309;
+    --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    padding: 36px 24px 80px;
+  }
+  .shell { max-width: 1140px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .brand-row { display: flex; align-items: baseline; gap: 12px; }
+  h1 {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+  .version-pill {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border: 1px solid var(--ink);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+  .lead {
+    margin-top: 10px;
+    max-width: 640px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button, a.btn-link {
+    border: 1.5px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    font: 600 13px/1 var(--sans);
+    padding: 11px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  button:hover, a.btn-link:hover { background: var(--cobalt); border-color: var(--cobalt); }
+  button:active, a.btn-link:active { transform: translateY(1px); }
+  button:disabled { opacity: 0.6; cursor: wait; }
+  button.secondary, a.btn-link.secondary {
+    background: var(--surface);
+    color: var(--ink);
+  }
+  button.secondary:hover, a.btn-link.secondary:hover { background: #e9e6dd; border-color: var(--ink); }
+  button.active-toggle {
+    background: var(--forest);
+    border-color: var(--forest);
+    color: #fff;
+  }
+  button.mini {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-width: 1px;
+  }
+
+  /* Zero-secret proof banner */
+  .proof-card {
+    margin-top: 24px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 5px solid var(--forest);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .proof-strip {
+    padding: 18px 22px;
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr auto;
+    gap: 18px;
+    align-items: center;
+  }
+  @media (max-width: 840px) { .proof-strip { grid-template-columns: 1fr; } }
+  .proof-title { font-weight: 700; font-size: 16px; color: var(--forest); }
+  .proof-sub { font-size: 13px; color: var(--muted); margin-top: 3px; word-break: break-all; }
+  .kv-label { font-size: 12px; color: var(--muted); }
+  .kv-val { font-family: var(--mono); font-size: 13px; font-weight: 600; margin-top: 2px; }
+
+  .proof-drawer {
+    display: none;
+    border-top: 1px solid #eceae2;
+    background: #faf9f5;
+    padding: 14px 22px;
+    font-size: 13px;
+  }
+  .proof-drawer.open { display: block; }
+  .proof-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .file-chip {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+  }
+  .file-chip.ok { color: var(--forest); border-color: #bbf7d0; background: #f0fdf4; }
+  .file-chip.bad { color: var(--crimson); border-color: #fecaca; background: #fef2f2; }
+
+  .mode-note {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Summary KPI strip */
+  .kpi-row {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+  @media (max-width: 780px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 14px 18px;
+  }
+  .kpi-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .kpi-num {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 800;
+    margin-top: 4px;
+    line-height: 1.1;
+  }
+  .kpi-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* Main ledger layout */
+  .grid {
+    margin-top: 22px;
+    display: grid;
+    grid-template-columns: 1.25fr 1.05fr;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .panel-head h2 { font-size: 16px; font-weight: 700; }
+  .panel-hint { font-size: 12px; color: var(--muted); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td {
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid #eceae2;
+  }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; background: #faf9f5; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr { cursor: pointer; transition: background 0.12s ease; }
+  tbody tr:hover { background: #f8f7f2; }
+  tbody tr.selected { background: #eff6ff; }
+  .repo-name { font-family: var(--mono); font-weight: 600; color: var(--ink); text-decoration: none; }
+  .repo-name:hover { color: var(--cobalt); text-decoration: underline; }
+  .repo-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: lowercase;
+  }
+  .b-clean { background: #dcfce7; color: var(--forest); }
+  .b-review { background: #fef3c7; color: var(--amber); }
+  .b-attention { background: #fee2e2; color: var(--crimson); }
+  .b-low { background: #e2e8f0; color: #334155; }
+  .b-cat { background: #eff6ff; color: var(--cobalt); font-family: var(--mono); }
+
+  .filter-bar {
+    padding: 10px 18px;
+    border-bottom: 1px solid #eceae2;
+    background: #faf9f5;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .pill {
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    color: var(--ink);
+    font: 600 12px/1 var(--sans);
+    padding: 6px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .pill.active {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+  }
+  .pill:hover:not(.active) { background: #ece9df; }
+
+  .finding-list { padding: 6px 20px 18px; max-height: 560px; overflow-y: auto; }
+  .finding {
+    padding: 14px 0;
+    border-bottom: 1px solid #eceae2;
+  }
+  .finding:last-child { border-bottom: none; }
+  .f-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-family: var(--mono); font-size: 12.5px; }
+  .f-badges { display: flex; gap: 6px; align-items: center; }
+  .f-msg { margin-top: 6px; font-weight: 600; font-size: 14px; word-break: break-word; }
+  .f-why { margin-top: 4px; font-size: 13px; color: var(--muted); }
+  .f-evidence {
+    margin-top: 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+    background: #f6f5f0;
+    border: 1px solid #e5e2d8;
+    border-radius: 4px;
+    padding: 5px 8px;
+    color: #334155;
+    word-break: break-word;
+  }
+  .f-actions {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .f-link { font-size: 12px; color: var(--cobalt); text-decoration: none; font-weight: 600; }
+  .f-link:hover { text-decoration: underline; }
+  .remediated-tag {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--forest);
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .remediated-tag:hover { text-decoration: underline; }
+
+  .trace-box {
+    margin-top: 24px;
+    background: #14171a;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 18px 22px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.75;
+    overflow-x: auto;
+  }
+  .trace-head {
+    color: #94a3b8;
+    margin-bottom: 10px;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .t-ok { color: #4ade80; font-weight: 700; }
+  .t-post { color: #c084fc; font-weight: 700; }
+  .t-url { color: #7dd3fc; }
+  .t-auth { color: #fbbf24; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div>
+      <div class="brand-row">
+        <h1>GhostWatch</h1>
+        <span class="version-pill">v2.1</span>
+      </div>
+      <p class="lead">Personal GitHub security watchdog running inside a Fly.io Sprite. Audits commits, diffs, open pull requests, and repo security posture — and opens remediation issues — through the Sprites Connector Gateway with zero tokens stored in the sandbox.</p>
+    </div>
+    <div class="actions">
+      <button id="btn-scan">Run live audit</button>
+      <button id="btn-demo" class="secondary">Preview demo</button>
+      <button id="btn-watchdog" class="secondary" aria-pressed="false">Watchdog: OFF</button>
+      <button id="btn-export" class="secondary">Export .md</button>
+      <button id="btn-sarif" class="secondary">SARIF</button>
+    </div>
+  </header>
+
+  <section id="auth-banner" style="display:none;margin-top:20px;padding:16px 20px;background:var(--surface);border:1px solid var(--crimson);border-left:5px solid var(--crimson);border-radius:8px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+    <div>
+      <div style="font-size:14px;font-weight:600;color:var(--crimson);">Dashboard authentication required — enter GHOSTWATCH_DASHBOARD_TOKEN</div>
+      <div id="auth-msg" style="font-size:12px;color:var(--muted);margin-top:2px;">Token stays in browser sessionStorage and is sent via X-GhostWatch-Token.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input id="auth-token-input" type="password" placeholder="Paste dashboard token" style="padding:8px 12px;border:1px solid var(--rule);border-radius:6px;font-family:var(--mono);font-size:13px;min-width:240px;" />
+      <button id="btn-auth-save">Unlock</button>
+    </div>
+  </section>
+
+  <section class="proof-card" id="proof-card">
+    <div class="proof-strip">
+      <div>
+        <div class="proof-title" id="proof-title">Checking Sprite environment...</div>
+        <div class="proof-sub" id="proof-sub">Scanning environment variables and credential files for leaked secrets.</div>
+      </div>
+      <div>
+        <div class="kv-label">Secrets in Sprite env / disk</div>
+        <div class="kv-val" id="proof-count">—</div>
+      </div>
+      <div>
+        <div class="kv-label">Authorization header sent</div>
+        <div class="kv-val" id="proof-header">None (Gateway injected)</div>
+      </div>
+      <div>
+        <button id="btn-proof" class="secondary mini">Inspect proof</button>
+      </div>
+    </div>
+    <div class="proof-drawer" id="proof-drawer">
+      <div id="proof-detail-text"></div>
+      <div class="proof-files" id="proof-files"></div>
+    </div>
+  </section>
+
+  <div class="mode-note">
+    <span id="mode-label">Mode: initializing</span>
+    <span id="scan-time"></span>
+  </div>
+
+  <section class="kpi-row">
+    <div class="kpi">
+      <div class="kpi-label">Overall health score</div>
+      <div class="kpi-num" id="kpi-score" style="color:var(--cobalt);">—</div>
+      <div class="kpi-sub" id="kpi-delta">Waiting for baseline</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Audit coverage</div>
+      <div class="kpi-num" id="kpi-repos">—</div>
+      <div class="kpi-sub" id="kpi-coverage-sub">commits &amp; open PRs</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">High-severity alerts</div>
+      <div class="kpi-num" id="kpi-high" style="color:var(--crimson);">—</div>
+      <div class="kpi-sub" id="kpi-med">medium / low alerts</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Gateway calls (0 tokens)</div>
+      <div class="kpi-num" id="kpi-traces" style="color:var(--forest);">—</div>
+      <div class="kpi-sub" id="kpi-history-sub">scans this session</div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Repository health ledger</h2>
+        <span class="panel-hint">Click a row to filter findings</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Repository</th>
+            <th>Commits / PRs</th>
+            <th>Score</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="repo-rows">
+          <tr><td colspan="4" style="color:var(--muted);">Loading audit...</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Security findings</h2>
+        <span id="finding-count" style="font-family:var(--mono);font-size:13px;color:var(--muted);">0 items</span>
+      </div>
+      <div class="filter-bar" id="filter-bar">
+        <button class="pill active" data-sev="all">All</button>
+        <button class="pill" data-sev="high">High</button>
+        <button class="pill" data-sev="medium">Medium</button>
+        <button class="pill" data-sev="low">Low</button>
+        <span id="repo-filter-slot"></span>
+      </div>
+      <div class="finding-list" id="finding-list">
+        <p style="padding:14px 0;color:var(--muted);font-size:14px;">Waiting for scan...</p>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top:24px;">
+    <div class="panel-head">
+      <h2>Session audit history</h2>
+      <span class="panel-hint" id="history-summary">Latest scans recorded on Sprite disk</span>
+    </div>
+    <div id="history-strip" style="padding:12px 20px;display:flex;flex-wrap:wrap;gap:8px;font-family:var(--mono);font-size:12px;color:var(--muted);">No scans recorded yet.</div>
+  </section>
+
+  <section class="trace-box">
+    <div class="trace-head">
+      <span>Sprites Connector Gateway trace (zero credentials leave the host)</span>
+      <span id="trace-count">0 requests</span>
+    </div>
+    <div id="trace-lines">Waiting for gateway calls...</div>
+  </section>
+</div>
+
+<script>
+const state = {
+  audit: null,
+  severityFilter: 'all',
+  repoFilter: null,
+  traces: [],
+  triageCache: {},
+  watchdogTimer: null,
+  inFlight: false,
+  demoMode: false,
+};
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeUrl(raw) {
+  try {
+    const parsed = new URL(String(raw || ''));
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      return parsed.href;
+    }
+  } catch (_) {}
+  return '#';
+}
+
+function apiFetch(url, opts = {}) {
+  const token = sessionStorage.getItem('gw_token') || '';
+  const headers = Object.assign({}, opts.headers || {});
+  if (token) headers['X-GhostWatch-Token'] = token;
+  return fetch(url, Object.assign({}, opts, { headers })).then(res => {
+    const authBanner = document.getElementById('auth-banner');
+    const authMsg = document.getElementById('auth-msg');
+    if (res.status === 401) {
+      authBanner.style.display = 'flex';
+      if (authMsg) {
+        authMsg.textContent = token
+          ? 'Token rejected (HTTP 401) — verify GHOSTWATCH_DASHBOARD_TOKEN and try again.'
+          : 'Token stays in browser sessionStorage and is sent via X-GhostWatch-Token.';
+      }
+    } else {
+      authBanner.style.display = 'none';
+    }
+    return res;
+  });
+}
+
+async function downloadReport(url, filename) {
+  try {
+    const res = await apiFetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } catch (err) {
+    document.getElementById('mode-label').textContent = `Export failed: ${err.message}`;
+  }
+}
+
+async function loadAudit(forceDemo = state.demoMode) {
+  if (state.inFlight) return;
+  state.inFlight = true;
+  state.demoMode = Boolean(forceDemo);
+  const btn = document.getElementById('btn-scan');
+  const demoBtn = document.getElementById('btn-demo');
+  btn.textContent = state.demoMode ? 'Run live audit' : 'Scanning...';
+  btn.disabled = true;
+  if (demoBtn) demoBtn.disabled = true;
+  try {
+    const res = await apiFetch(state.demoMode ? '/api/scan?demo=1' : '/api/scan');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    // Re-attach cached AI triage results and clear stale repo filter
+    (data.findings || []).forEach(f => {
+      if (state.triageCache[f.id]) f.triage = state.triageCache[f.id];
+    });
+    if (state.repoFilter && !(data.repos || []).some(r => r.full_name === state.repoFilter)) {
+      state.repoFilter = null;
+    }
+    state.audit = data;
+    // Preserve prior POST remediation/triage traces across re-scans
+    const postTraces = (state.traces || []).filter(t => t.method === 'POST');
+    state.traces = [...(data.gateway_traces || []), ...postTraces];
+    renderAudit();
+  } catch (err) {
+    document.getElementById('mode-label').textContent = `Audit request failed: ${err.message}`;
+  } finally {
+    state.inFlight = false;
+    btn.textContent = 'Run live audit';
+    btn.disabled = false;
+    if (demoBtn) demoBtn.disabled = false;
+  }
+}
+
+function renderProof(zs) {
+  const card = document.getElementById('proof-card');
+  const title = document.getElementById('proof-title');
+  if (zs.zero_credential_verified) {
+    card.style.borderLeftColor = 'var(--forest)';
+    title.style.color = 'var(--forest)';
+    title.textContent = 'Zero-credential Sprite verified';
+  } else {
+    card.style.borderLeftColor = 'var(--crimson)';
+    title.style.color = 'var(--crimson)';
+    title.textContent = 'Warning: secret variable or credential file detected';
+  }
+  document.getElementById('proof-sub').textContent =
+    `Host: ${zs.hostname} | Gateway: ${zs.gateway_base}`;
+  const credCount = (zs.credential_files_found || []).length;
+  document.getElementById('proof-count').textContent =
+    `${zs.secret_env_vars_found} env / ${credCount} cred files`;
+
+  document.getElementById('proof-detail-text').textContent =
+    `Checked at ${zs.checked_at}. Sensitive env vars found: ${zs.secret_env_vars_found}` +
+    (zs.secret_env_names.length ? ` (${zs.secret_env_names.join(', ')})` : ' (none)') +
+    '. Credential files inspected:';
+
+  const filesEl = document.getElementById('proof-files');
+  filesEl.innerHTML = (zs.credential_files_checked || []).map(f => `
+    <span class="file-chip ${f.present ? 'bad' : 'ok'}">
+      ${escapeHtml(f.path)}: ${f.present ? 'PRESENT' : 'absent'}
+    </span>
+  `).join('');
+}
+
+function renderRepos() {
+  const d = state.audit;
+  const tbody = document.getElementById('repo-rows');
+  tbody.innerHTML = d.repos.map(r => {
+    const selectedClass = state.repoFilter === r.full_name ? 'selected' : '';
+    const vis = r.private ? 'private' : 'public';
+    return `
+      <tr class="${selectedClass}" data-repo="${escapeHtml(r.full_name)}" tabindex="0" role="button" aria-pressed="${state.repoFilter === r.full_name ? 'true' : 'false'}">
+        <td>
+          <a class="repo-name" href="${escapeHtml(safeUrl(r.html_url))}" target="_blank" rel="noreferrer">${escapeHtml(r.full_name)}</a>
+          <div class="repo-meta">${escapeHtml(vis)} · ${escapeHtml(r.language)}${r.scan_warning ? ` · ⚠ ${escapeHtml(r.scan_warning)}` : ''}</div>
+        </td>
+        <td style="font-family:var(--mono);">${Number(r.commits_checked)} / ${Number(r.prs_checked)}</td>
+        <td style="font-family:var(--mono);font-weight:700;">${Number(r.health_score)}</td>
+        <td><span class="badge b-${escapeHtml(r.status)}">${escapeHtml(r.status)}</span></td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.querySelectorAll('tr[data-repo]').forEach(tr => {
+    const toggleRow = (ev) => {
+      if (ev.target.closest('a')) return;
+      const repo = tr.getAttribute('data-repo');
+      state.repoFilter = state.repoFilter === repo ? null : repo;
+      renderRepos();
+      renderFindings();
+    };
+    tr.addEventListener('click', toggleRow);
+    tr.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        toggleRow(ev);
+      }
+    });
+  });
+}
+
+function renderFindings() {
+  const d = state.audit;
+  const slot = document.getElementById('repo-filter-slot');
+  if (state.repoFilter) {
+    slot.innerHTML = `<button class="pill active" id="clear-repo-pill">${escapeHtml(state.repoFilter)} ×</button>`;
+    document.getElementById('clear-repo-pill').addEventListener('click', () => {
+      state.repoFilter = null;
+      renderRepos();
+      renderFindings();
+    });
+  } else {
+    slot.innerHTML = '';
+  }
+
+  const filtered = (d.findings || []).filter(f => {
+    if (state.severityFilter !== 'all' && f.severity !== state.severityFilter) return false;
+    if (state.repoFilter && f.repo !== state.repoFilter) return false;
+    return true;
+  });
+
+  document.getElementById('finding-count').textContent = `${filtered.length} / ${d.findings.length} items`;
+  const flist = document.getElementById('finding-list');
+
+  if (!filtered.length) {
+    flist.innerHTML = '<p style="padding:14px 0;color:var(--forest);font-size:14px;">No security findings match the current filter.</p>';
+    return;
+  }
+
+  flist.innerHTML = filtered.map(f => {
+    const sevClass = f.severity === 'high' ? 'b-attention' : (f.severity === 'medium' ? 'b-review' : 'b-low');
+    const rem = f.remediation_issue;
+    const actionHtml = rem
+      ? `<a class="remediated-tag" href="${escapeHtml(safeUrl(rem.html_url))}" target="_blank" rel="noreferrer">✓ Issue #${escapeHtml(rem.issue_number)} opened${rem.mode === 'local-preview' ? ' (preview)' : ''}</a>`
+      : `<button class="secondary mini btn-remediate" data-fid="${escapeHtml(f.id)}">Open GitHub Issue via Gateway</button>`;
+
+    return `
+      <div class="finding">
+        <div class="f-top">
+          <span>${escapeHtml(f.repo)} · ${escapeHtml(f.ref || f.sha)}</span>
+          <div class="f-badges">
+            <span class="badge b-cat">${escapeHtml(f.category || 'commit')}</span>
+            <span class="badge ${sevClass}">${escapeHtml(f.severity)}</span>
+          </div>
+        </div>
+        <div class="f-msg">${escapeHtml(f.message)}</div>
+        <div class="f-why">${escapeHtml(f.reason)}</div>
+        ${f.evidence ? `<div class="f-evidence">${escapeHtml(f.evidence)}</div>` : ''}
+        <div class="f-actions">
+          ${actionHtml}
+          <button class="secondary mini btn-triage" data-fid="${escapeHtml(f.id)}">AI Triage</button>
+          <a class="f-link" href="${escapeHtml(safeUrl(f.url))}" target="_blank" rel="noreferrer">View on GitHub ↗</a>
+        </div>
+        ${f.triage ? `
+          <div class="f-evidence" style="margin-top:10px;border-left:3px solid var(--cobalt);background:#f8fafc;">
+            <div style="font-weight:700;color:var(--cobalt);margin-bottom:4px;">AI Triage (${escapeHtml(f.triage.engine)} · ${escapeHtml(f.triage.model)})</div>
+            <div style="margin-bottom:6px;">${escapeHtml(f.triage.impact)}</div>
+            <ol style="padding-left:18px;margin:4px 0 6px;">${(f.triage.fix_steps || []).map(st => `<li>${escapeHtml(st)}</li>`).join('')}</ol>
+            <div style="color:var(--muted);">Verify: ${escapeHtml(f.triage.verification)}</div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+
+  flist.querySelectorAll('.btn-remediate').forEach(btn => {
+    btn.addEventListener('click', () => openRemediationIssue(btn));
+  });
+  flist.querySelectorAll('.btn-triage').forEach(btn => {
+    btn.addEventListener('click', () => runAiTriage(btn));
+  });
+}
+
+async function runAiTriage(btn) {
+  const fid = btn.getAttribute('data-fid');
+  const finding = (state.audit.findings || []).find(f => f.id === fid);
+  if (!finding) return;
+  btn.disabled = true;
+  btn.textContent = 'Triaging...';
+  try {
+    const res = await apiFetch('/api/triage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo: finding.repo,
+        category: finding.category,
+        severity: finding.severity,
+        reason: finding.reason,
+        message: finding.message,
+        evidence: finding.evidence || '',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    finding.triage = data;
+    state.triageCache[finding.id] = data;
+    if (data.trace) {
+      state.traces.push(data.trace);
+      renderTraces();
+    }
+    renderFindings();
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = `Retry (${err.message})`;
+  }
+}
+
+async function openRemediationIssue(btn) {
+  const fid = btn.getAttribute('data-fid');
+  const finding = (state.audit.findings || []).find(f => f.id === fid);
+  if (!finding) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Opening via Gateway...';
+  try {
+    const res = await apiFetch('/api/remediate/issue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        finding_id: finding.id,
+        repo: finding.repo,
+        ref: finding.ref || finding.sha,
+        severity: finding.severity,
+        reason: finding.reason,
+        message: finding.message,
+        evidence: finding.evidence || '',
+        demo: state.audit.mode === 'local-preview',
+      }),
+    });
+    const result = await res.json();
+    if (!res.ok) {
+      if (result.trace) {
+        state.traces.push(result.trace);
+        renderTraces();
+      }
+      throw new Error(result.error || `HTTP ${res.status}`);
+    }
+
+    finding.remediation_issue = {
+      issue_number: result.issue_number,
+      html_url: result.html_url,
+      mode: result.mode,
+    };
+    if (result.trace) {
+      state.traces.push(result.trace);
+    }
+    renderFindings();
+    renderTraces();
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = `Retry (${err.message})`;
+  }
+}
+
+function renderTraces() {
+  document.getElementById('trace-count').textContent = `${state.traces.length} requests`;
+  document.getElementById('kpi-traces').textContent = String(state.traces.length);
+  document.getElementById('trace-lines').innerHTML = state.traces.map(t => {
+    const methodCls = t.method === 'POST' ? 't-post' : 't-ok';
+    return `
+      <div>
+        <span class="${methodCls}">${escapeHtml(t.status)} ${escapeHtml(t.method)}</span>
+        <span class="t-url">${escapeHtml(t.url)}</span>
+        (${Number(t.latency_ms)}ms) — <span class="t-auth">Auth: ${escapeHtml(t.authorization_header)}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderAudit() {
+  const d = state.audit;
+  renderProof(d.zero_secrets);
+
+  const modeEl = document.getElementById('mode-label');
+  if (d.mode === 'live-sprites-connector') {
+    modeEl.textContent = `Connected via Fly.io Sprites GitHub Connector (@${d.account})`;
+    modeEl.style.color = 'var(--forest)';
+  } else if (d.mode === 'gateway-error') {
+    modeEl.textContent = `Gateway error: ${d.fallback_reason || 'HTTP error from Sprites Connector'}`;
+    modeEl.style.color = 'var(--crimson)';
+  } else {
+    modeEl.textContent = `Local preview mode (@${d.account}) — ${d.fallback_reason || 'deploy inside a Fly.io Sprite to hit live gateway'}`;
+    modeEl.style.color = 'var(--muted)';
+  }
+  document.getElementById('scan-time').textContent = `Last scan: ${d.scanned_at}`;
+
+  const s = d.summary || {};
+  document.getElementById('kpi-score').textContent = `${d.overall_score}/100`;
+  const delta = Number(s.score_delta || 0);
+  document.getElementById('kpi-delta').textContent =
+    delta === 0 ? 'Steady since last scan' : `${delta > 0 ? '+' : ''}${delta} pts vs previous scan`;
+
+  document.getElementById('kpi-repos').textContent = `${s.repos_audited ?? d.repos.length} repos`;
+  document.getElementById('kpi-coverage-sub').textContent =
+    `${s.commits_checked ?? 0} commits · ${s.prs_checked ?? 0} open PRs`;
+
+  document.getElementById('kpi-high').textContent = String(s.high_findings ?? 0);
+  document.getElementById('kpi-med').textContent =
+    `${s.medium_findings ?? 0} medium · ${s.low_findings ?? 0} low`;
+
+  document.getElementById('kpi-history-sub').textContent =
+    `${(d.history || []).length} scan(s) recorded this session`;
+
+  renderRepos();
+  renderFindings();
+  renderHistory();
+  renderTraces();
+}
+
+function renderHistory() {
+  const hist = (state.audit && state.audit.history) || [];
+  const el = document.getElementById('history-strip');
+  if (!el) return;
+  if (!hist.length) {
+    el.textContent = 'No scans recorded yet.';
+    return;
+  }
+  el.innerHTML = hist.slice().reverse().map(h => {
+    const ts = String(h.scanned_at || '').replace('T', ' ').slice(0, 19);
+    const cls = (h.mode === 'gateway-error' || Number(h.high_findings) > 0) ? 'bad' : 'ok';
+    return `<span class="file-chip ${cls}">${escapeHtml(ts)} UTC · score ${Number(h.overall_score)}/100 · ${Number(h.findings_count)} findings (${escapeHtml(h.mode)})</span>`;
+  }).join('');
+}
+
+document.getElementById('btn-scan').addEventListener('click', () => loadAudit(false));
+document.getElementById('btn-demo').addEventListener('click', () => loadAudit(true));
+document.getElementById('btn-export').addEventListener('click', () => downloadReport('/api/report.md', 'ghostwatch-report.md'));
+document.getElementById('btn-sarif').addEventListener('click', () => downloadReport('/api/report.sarif', 'ghostwatch.sarif'));
+function submitAuthToken() {
+  const input = document.getElementById('auth-token-input');
+  const val = input.value.trim();
+  if (!val) return;
+  sessionStorage.setItem('gw_token', val);
+  input.value = '';
+  loadAudit(state.demoMode);
+}
+document.getElementById('btn-auth-save').addEventListener('click', submitAuthToken);
+document.getElementById('auth-token-input').addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    submitAuthToken();
+  }
+});
+
+document.getElementById('btn-proof').addEventListener('click', async () => {
+  const drawer = document.getElementById('proof-drawer');
+  try {
+    const res = await apiFetch('/api/env-proof');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const zs = await res.json();
+    renderProof(zs);
+    drawer.classList.toggle('open');
+    const isOpen = drawer.classList.contains('open');
+    document.getElementById('btn-proof').textContent = isOpen ? 'Hide proof' : 'Inspect proof';
+    document.getElementById('btn-proof').setAttribute('aria-expanded', String(isOpen));
+  } catch (err) {
+    document.getElementById('mode-label').textContent = `Proof check failed: ${err.message}`;
+  }
+});
+
+document.getElementById('btn-watchdog').addEventListener('click', (ev) => {
+  const btn = ev.currentTarget;
+  if (state.watchdogTimer) {
+    clearInterval(state.watchdogTimer);
+    state.watchdogTimer = null;
+    btn.classList.remove('active-toggle');
+    btn.classList.add('secondary');
+    btn.setAttribute('aria-pressed', 'false');
+    btn.textContent = 'Watchdog: OFF';
+  } else {
+    state.watchdogTimer = setInterval(() => loadAudit(), 60000);
+    btn.classList.remove('secondary');
+    btn.classList.add('active-toggle');
+    btn.setAttribute('aria-pressed', 'true');
+    btn.textContent = 'Watchdog: 60s ON';
+  }
+});
+
+document.querySelectorAll('#filter-bar .pill[data-sev]').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('#filter-bar .pill[data-sev]').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    state.severityFilter = pill.getAttribute('data-sev');
+    if (state.audit) renderFindings();
+  });
+});
+
+loadAudit();
+</script>
+</body>
+</html>
