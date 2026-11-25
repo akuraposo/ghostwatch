@@ -284,9 +284,36 @@ def inspect_zero_secrets() -> dict[str, Any]:
     }
 
 
+def discover_gateway_urls() -> tuple[str, str]:
+    """Auto-discover live Sprites Connector gateway_base_url via /v1/gateway/list."""
+    gh_url = GATEWAY_BASE
+    or_url = OPENROUTER_GW
+    try:
+        req = urllib.request.Request(
+            "https://api.sprites.dev/v1/gateway/list",
+            headers={"Accept": "application/json", "User-Agent": "GhostWatch-Sprite-Agent/2.1"},
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        for conn in data.get("connections") or []:
+            prov = (conn.get("provider") or "").lower()
+            base = (conn.get("gateway_base_url") or "").rstrip("/")
+            if not base:
+                continue
+            if prov == "github":
+                gh_url = base
+            elif prov == "openrouter":
+                or_url = base
+    except Exception:
+        pass
+    return gh_url, or_url
+
+
 def gateway_request(method: str, path: str, body: dict[str, Any] | None = None) -> tuple[Any, dict[str, Any]]:
     """Call the Fly.io Sprites Connector Gateway with ZERO Authorization headers."""
-    url = f"{GATEWAY_BASE}/{path.lstrip('/')}"
+    active_gh, _ = discover_gateway_urls() if GATEWAY_BASE == "https://api.sprites.dev/v1/gateway/github" else (GATEWAY_BASE, OPENROUTER_GW)
+    url = f"{active_gh}/{path.lstrip('/')}"
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": "GhostWatch-Sprite-Agent/2.0",
@@ -1071,7 +1098,8 @@ def triage_finding(payload: dict[str, Any]) -> dict[str, Any]:
     )
 
     # 1. Try Fly.io Sprites OpenRouter Connector (zero API keys in Sprite)
-    or_url = f"{OPENROUTER_GW}/v1/chat/completions"
+    _, active_or = discover_gateway_urls() if OPENROUTER_GW == "https://api.sprites.dev/v1/gateway/openrouter" else (GATEWAY_BASE, OPENROUTER_GW)
+    or_url = f"{active_or}/v1/chat/completions"
     try:
         req = urllib.request.Request(
             or_url,
